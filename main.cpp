@@ -2,11 +2,11 @@
 // Identification of PPM images degraded by (motion) blur
 //
 // Usage:
-//   Step 1: ./motionblur findlines image1.ppm [ ... imageN.ppm]
+//   Step 1: ./motionblur findlines scene.bmf
 //     Canny filters images to extract strong edges, a lack of which
 //     indicates blur degradation. The resulting edge images are saved
 //     in a "Canny" folder.
-//   Step 2: ./motionblur sortout   image1.ppm [ ... imageN.ppm]
+//   Step 2: ./motionblur sortout scene.bmf
 //     Compares edge images and dismisses those that have less overall
 //     edge count/strength than their neighboring images. The rest (the
 //     images with comparatively good edges) are saved to:
@@ -37,12 +37,12 @@ int main(int argc, char **args) {
     if (argc < 2)
     {
         cout << "Identification of images degraded by motion blur" << endl;
-        cout << "Usage: ./motionblur {findlines, sortout} image1.ppm [image2.ppm image3.ppm ... imageN.ppm]" << endl;
+        cout << "Usage: ./motionblur {findlines, sortout} scene.bmf" << endl;
         return 1;
     }
     if (argc < 3)
     {
-        cout << "No images given!" << endl;
+        cout << "No scene file given!" << endl;
         return 1;
     }
 
@@ -57,27 +57,46 @@ int main(int argc, char **args) {
     }
 
 
+    string image_folder;
+    vector<string> filenames;
+    ifstream infile(args[2]);
+    if (infile.fail())
+    {
+        cerr << "Could not read scene file!" << endl;
+    }
+    else
+    {
+        string str;
+        getline(infile, str); /// first line is useless
+        getline(infile, str);
+        while (infile)
+        {
+            size_t found = str.find_last_of("/");
+            image_folder = str.substr(0, found);
+            filenames.push_back(str.substr(found+1));
+            getline(infile, str);
+        }
+        infile.close();
+    }
+
+
 
     /// "preprocessing": Canny filtering images to find strong edges
     if (mode == 1)
-    {        
-        vector<char*> filenames;
-        for (int i = 2; i < argc; i++)
-            filenames.push_back(args[i]);
+    {
+        CTensor<double> in_img;        
+        CMatrix<double> in_layerx, in_layery, tmp, mag;
         
-        for (vector<char*>::iterator iter = filenames.begin(); iter != filenames.end(); ++iter)
+        for (vector<string>::iterator iter = filenames.begin(); iter != filenames.end(); ++iter)
         {
-            string s = (*iter);
-            char *charbuf = new char[255];
-            cout << "File: " << s << endl;
+            size_t split = (*iter).find_last_of(".");
+            cout << "File: " << *iter << " --> " << "./Canny/" << (*iter).substr(0,split) << "_Canny" << (*iter).substr(split) << endl;
 
-            CTensor<double> in_img;
-            in_img.readFromPPM(s.c_str());
+            in_img.readFromPPM((*iter).c_str());
             int width = in_img.xSize();
             int height = in_img.ySize();
 
             in_img.downsample(width, height);
-            CMatrix<double> in_layerx, in_layery, tmp, mag;
             /// all color layers are equally blurred (?)
             in_layerx = in_img.getMatrix(0);
             in_layery = in_img.getMatrix(0);
@@ -88,17 +107,15 @@ int main(int argc, char **args) {
 
             //~ in_img.downsample(512, 512);
             //~ in_img.fft();
-            //~ in_img.writeToPPM("fffuuuuu.ppm");
             //~ in_img.normalize(0.0, 255.0);
             //~ in_layer = in_img.getMatrix(0);
-            //~ in_layer.writeToPGM("ffu.pgm");
             //~ return 0;
 
 
             //~ NFilter::filter(in_layerx, CSmooth<double>::CSmooth(2, 1), 1);
             //~ NFilter::filter(in_layery, CSmooth<double>::CSmooth(2, 1), 1);
             
-            /// (debug) write 
+            //~ /// (debug) write 
             //~ sprintf(charbuf, "resized_blackandwhite_%s.pgm", s.c_str());
             //~ in_layerx.writeToPGM(charbuf);
             
@@ -160,7 +177,9 @@ int main(int argc, char **args) {
 
             /// (debug) write lines image
             mag.normalize(0., 255.);
-            sprintf(charbuf, "%s_Canny.pgm", s.c_str());
+            char *charbuf = new char[1024];
+            split = (*iter).find_last_of(".");
+            sprintf(charbuf, "./Canny/%s_Canny%s", (*iter).substr(0,split).c_str(), (*iter).substr(split).c_str());
             mag.writeToPGM(charbuf);
 
             delete[] charbuf;
@@ -171,42 +190,36 @@ int main(int argc, char **args) {
     else if (mode == 2)
     {
         vector<float> scores;
-        vector<char*> filenames;
-        vector<char*> ok_files;
+        vector<string> ok_files;
         char *charbuf = new char[255];
 
         /// try to read existing scores file
         ifstream infile("scores.txt");
         if (infile.fail())
         {
-            cerr << "Could not read file scores.txt!" << endl;
+            cerr << "Could not read scores.txt!" << endl;
         }
         else
         {
-            int s;
-            infile >> s;
-            for (int i = 0; i < s; ++i)
+            string str;
+            getline(infile, str);
+            while (infile)
             {
-                float sc;
-                char* f = new char[255];
-                infile >> f;
-                filenames.push_back(f);
-                infile >> sc;
-                scores.push_back((float)sc);
+                scores.push_back(atof(str.c_str()));
+                getline(infile, str);
             }
             infile.close();
         }
 
+
         /// if the scores file could not be found/read, create scores and write the file
         if (scores.size() == 0)
         {
-            for (int i = 2; i < argc; i++)
-                filenames.push_back(args[i]);
-
             /// compute scores
-            for (vector<char*>::iterator iter = filenames.begin(); iter != filenames.end(); ++iter)
+            for (vector<string>::iterator iter = filenames.begin(); iter != filenames.end(); ++iter)
             {
-                sprintf(charbuf, "./Canny/%s_Canny.pgm", *iter);
+                size_t split = (*iter).find_last_of(".");
+                sprintf(charbuf, "./Canny/%s_Canny%s", (*iter).substr(0,split).c_str(), (*iter).substr(split).c_str());
                 
                 cout << "Reading " << charbuf << " for " << *iter << endl;
 
@@ -227,10 +240,9 @@ int main(int argc, char **args) {
 
             /// debug: write scores to file
             ofstream outfile ("scores.txt");
-            outfile << scores.size() << endl;
             for (unsigned int i = 0; i < scores.size(); ++i)
                 /// (long) casting to avoid float's scientific number notation (1e+06)
-                outfile << filenames[i] << "\t" << (long)scores[i] << endl;
+                outfile << (long)scores[i] << endl;
             outfile.close();
         }
             
@@ -256,12 +268,12 @@ int main(int argc, char **args) {
         }
 
         /// save good file names
-        ofstream outfile ("ok.txt");
-        outfile << ok_files.size() << endl;
+        ofstream outfile ("scene_without_blur.bmf");
+        outfile << ok_files.size() << " 1" << endl;
         for (unsigned int i = 0; i < ok_files.size(); ++i)
-            outfile << ok_files[i] << endl;
+            outfile << image_folder << "/" << ok_files[i] << endl;
         outfile.close();            
-        cout << filenames.size() - ok_files.size() << " of " << filenames.size() << " images have been dismissed. OK images saved to 'ok.txt'." << endl;
+        cout << filenames.size() - ok_files.size() << " of " << filenames.size() << " images have been dismissed. From the other images, I have compiled a new scene file (scene_without_blur.bmf)." << endl;
 
         delete[] charbuf;
     }
