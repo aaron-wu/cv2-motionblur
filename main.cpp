@@ -1,13 +1,19 @@
-// Identities degradation by motion blur in PPM image files
+////////////////////////////////////////////////////////////////////////
+// Identification of PPM images degraded by (motion) blur
 //
-// The program cuts a 512x512 piece from the images,
-// Fourier transforms it and finds line structures in
-// transformed that correspond to motion blur.
-//
-// Sources: 
+// Usage:
+//   Step 1: ./motionblur findlines image1.ppm [ ... imageN.ppm]
+//     Canny filters images to extract strong edges, a lack of which
+//     indicates blur degradation. The resulting edge images are saved
+//     in a "Canny" folder.
+//   Step 2: ./motionblur sortout   image1.ppm [ ... imageN.ppm]
+//     Compares edge images and dismisses those that have less overall
+//     edge count/strength than their neighboring images. The rest (the
+//     images with comparatively good edges) are saved to:
+//       "Scene_without_blur.bmf"
 //
 // Author: Nikolaus Mayer
-///////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
 
 #include <iostream>
 #include <string>
@@ -31,7 +37,7 @@ int main(int argc, char **args) {
     if (argc < 2)
     {
         cout << "Identification of images degraded by motion blur" << endl;
-        cout << "Usage: ./motionblur {findlines, sortout} (if sortout: image1.ppm [image2.ppm image3.ppm ... imageN.ppm])" << endl;
+        cout << "Usage: ./motionblur {findlines, sortout} image1.ppm [image2.ppm image3.ppm ... imageN.ppm]" << endl;
         return 1;
     }
     if (argc < 3)
